@@ -1,0 +1,13 @@
+ airline,source,destination,price
+AirAsia,Manila,Cebu,2500
+Cebu Pacific,Manila,Davao,3200
+Philippine Airlines,Manila,Cebu,4500
+AirAsia,Cebu,Manila,2600
+Cebu Pacific,Davao,Manila,3500
+Philippine Airlines,Davao,Cebu,4800
+AirAsia,Manila,Iloilo,2800
+Cebu Pacific,Iloilo,Manila,3000
+Philippine Airlines,Manila,Bacolod,4000
+AirAsia,Bacolod,Manila,2700
+Cebu Pacific,Manila,General Santos,3600
+Philippine Airlines,General Santos,Manila,500

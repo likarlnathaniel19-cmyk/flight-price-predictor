@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PASIA // Flight Matrix Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=400;500;600;700;800&family=Space+Grotesk:wght=500;700&display=swap');
+
+        :root {
+            --bg-main: #060913;
+            --bg-surface: #0d1527;
+            --bg-card: rgba(20, 31, 56, 0.7);
+            --border-glow: rgba(14, 165, 233, 0.15);
+            --neon-cyan: #38bdf8;
+            --neon-blue: #0284c7;
+            --neon-orange: #f97316;
+            --neon-green: #10b981;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            background-color: var(--bg-main);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(249, 115, 22, 0.05) 0px, transparent 50%);
+            color: var(--text-primary);
+            margin: 0; padding: 16px;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; box-sizing: border-box;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%; max-width: 460px;
+            background: var(--bg-surface); border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px; padding: 28px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(12px);
+            position: relative;
+        }
+
+        .header { text-align: center; margin-bottom: 28px; position: relative; }
+        .header .badge-top {
+            display: inline-block; font-family: 'Space Grotesk', sans-serif; font-size: 10px;
+            letter-spacing: 2px; text-transform: uppercase; color: var(--neon-cyan);
+            background: rgba(56, 189, 248, 0.1); padding: 4px 12px; border-radius: 100px; margin-bottom: 12px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }
+
+        .header h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -0.5px; }
+        .header h1 span {
+            color: var(--neon-cyan); background: linear-gradient(to right, #38bdf8, #0284c7);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .header p { color: var(--text-secondary); margin: 8px 0 0 0; font-size: 13px; }
+
+        .form-group { margin-bottom: 18px; }
+        label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; letter-spacing: 0.75px; }
+        .select-wrapper { position: relative; }
+        
+        select {
+            width: 100%; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #ffffff; padding: 14px 16px; border-radius: 12px; font-size: 14px; font-weight: 500;
+            outline: none; box-sizing: border-box; appearance: none; transition: all 0.2s ease; cursor: pointer;
+        }
+        select:focus { border-color: var(--neon-cyan); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15); background: #111b33; }
+        .select-wrapper::after { content: '↓'; font-size: 12px; color: var(--text-muted); position: absolute; right: 16px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+
+        button.btn-execute {
+            width: 100%; background: linear-gradient(135deg, var(--neon-cyan) 0%, var(--neon-blue) 100%);
+            color: #040712; border: none; padding: 16px; border-radius: 14px; font-size: 15px; font-weight: 700;
+            font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.5px; cursor: pointer; margin-top: 12px;
+            transition: all 0.2s ease; box-shadow: 0 8px 20px -4px rgba(2, 132, 199, 0.4);
+        }
+        button.btn-execute:hover { transform: translateY(-1px); box-shadow: 0 12px 24px -4px rgba(2, 132, 199, 0.5); filter: brightness(1.1); }
+
+        .map-block {
+            width: 100%; height: 160px; background: #070b16; border-radius: 14px;
+            margin: 15px 0 20px 0; border: 1px solid rgba(56, 189, 248, 0.15);
+            overflow: hidden; position: relative; z-index: 1;
+        }
+
+        .flight-track-container { margin: 0 0 20px 0; padding: 15px; background: rgba(6, 9, 19, 0.4); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.03); }
+        .airport-labels { display: flex; justify-content: space-between; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; color: var(--neon-cyan); margin-bottom: 8px; }
+        .airport-labels span:last-child { color: var(--text-primary); }
+        .track-line { height: 4px; background: rgba(255, 255, 255, 0.08); width: 100%; border-radius: 10px; position: relative; }
+        .track-fill { height: 100%; background: linear-gradient(90deg, var(--neon-blue), var(--neon-cyan)); width: 0%; border-radius: 10px; transition: width 2.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .plane-icon { position: absolute; top: -6px; left: 0%; transform: translateX(-50%); font-size: 14px; transition: left 2.5s cubic-bezier(0.4, 0, 0.2, 1); text-shadow: 0 0 8px var(--neon-cyan); display: inline-block; }
+
+        .result-panel { margin-top: 28px; padding: 24px; background: linear-gradient(180deg, rgba(56, 189, 248, 0.03) 0%, rgba(2, 132, 199, 0.01) 100%); border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 18px; position: relative; overflow: hidden; }
+        .result-panel::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--neon-cyan); }
+        .result-title { font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 700; letter-spacing: 1px; display: block; }
+        .price { font-family: 'Space Grotesk', sans-serif; font-size: 42px; font-weight: 700; color: #ffffff; margin: 6px 0 16px 0; display: block; letter-spacing: -1px; }
+        
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-box { text-align: left; font-size: 11px; color: var(--text-muted); background: rgba(6, 9, 19, 0.5); padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.03); }
+        .stat-box b { color: var(--text-primary); display: block; font-size: 14px; font-weight: 600; margin-top: 4px; }
+        
+        .advice-panel { margin-top: 12px; background: rgba(249, 115, 22, 0.05); border: 1px solid rgba(249, 115, 22, 0.15); padding: 12px 14px; border-radius: 10px; text-align: left; font-size: 12px; color: #ffedd5; line-height: 1.4; }
+        .badge-container { text-align: left; margin-top: 14px; }
+        .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-direct { background: rgba(16, 185, 129, 0.1); color: var(--neon-green); border: 1px solid rgba(16, 185, 129, 0.2); }
+        .badge-layover { background: rgba(249, 115, 22, 0.1); color: var(--neon-orange); border: 1px solid rgba(249, 115, 22, 0.2); }
+
+        .arcade-container {
+            margin-top: 20px; background: #040712; border: 1px dashed rgba(56, 189, 248, 0.25);
+            border-radius: 14px; padding: 14px; text-align: center; position: relative;
+        }
+        .arcade-canvas {
+            background: #02040a; width: 100%; height: 140px; border-radius: 8px;
+            display: block; border: 1px solid rgba(255,255,255,0.04);
+        }
+        .arcade-controls-row {
+            display: flex; justify-content: space-between; gap: 8px; margin-top: 10px;
+        }
+        .btn-joy {
+            flex: 1; padding: 10px; background: rgba(20, 31, 56, 0.8); border: 1px solid rgba(56,189,248,0.2);
+            border-radius: 8px; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; outline: none;
+            user-select: none; -webkit-user-select: none; transition: all 0.1s ease;
+        }
+        .btn-joy:active { background: var(--neon-blue); border-color: var(--neon-cyan); transform: scale(0.98); }
+        
+        .arcade-reset-link {
+            display: inline-block; margin-top: 10px; font-size: 11px; text-transform: uppercase;
+            font-weight: 700; color: var(--text-muted); cursor: pointer; text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+        .arcade-reset-link:hover { color: var(--neon-cyan); }
+
+        .history-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+        .history-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        .history-item { background: rgba(20, 31, 56, 0.4); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.2s ease; }
+        .history-item:hover { background: rgba(56, 189, 248, 0.05); border-color: rgba(56, 189, 248, 0.2); }
+        .history-route { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .history-meta { font-size: 11px; color: var(--text-muted); }
+        .history-price { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; color: var(--neon-cyan); }
+        .no-history { font-size: 12px; color: var(--text-muted); font-style: italic; text-align: center; padding: 10px; }
+
+        /* Scanning Overlay Component */
+        .radar-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #040712; z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        .radar-overlay.active { opacity: 1; pointer-events: auto; }
+        .radar-scope { position: relative; width: 220px; height: 220px; border-radius: 50%; border: 2px solid rgba(56, 189, 248, 0.2); background: radial-gradient(circle, rgba(2, 132, 199, 0.05) 0%, transparent 75%); box-shadow: 0 0 30px rgba(2, 132, 199, 0.1); margin-bottom: 30px; }
+        .radar-scope::before { content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: rgba(56, 189, 248, 0.15); }
+        .radar-scope::after { content: ''; position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: rgba(56, 189, 248, 0.15); }
+        .radar-ring-mid { position: absolute; top: 25px; left: 25px; right: 25px; bottom: 25px; border-radius: 50%; border: 1px dashed rgba(56, 189, 248, 0.15); }
+        .radar-ring-inner { position: absolute; top: 65px; left: 65px; right: 65px; bottom: 65px; border-radius: 50%; border: 1px solid rgba(56, 189, 248, 0.1); }
+        .radar-sweep { position: absolute; width: 50%; height: 50%; top: 0; left: 50%; background: linear-gradient(35deg, rgba(56, 189, 248, 0.35) 0%, transparent 60%); transform-origin: bottom left; border-left: 1.5px solid var(--neon-cyan); animation: radarRotate 2s linear infinite; border-top-right-radius: 100%; }
+        .radar-ping { position: absolute; width: 6px; height: 6px; background: var(--neon-orange); border-radius: 50%; top: 40px; left: 150px; box-shadow: 0 0 10px var(--neon-orange); animation: pingPulse 1.2s ease-out infinite; }
+        .radar-ping-two { position: absolute; width: 5px; height: 5px; background: var(--neon-green); border-radius: 50%; bottom: 60px; left: 50px; box-shadow: 0 0 10px var(--neon-green); animation: pingPulse 1.5s ease-out infinite 0.4s; }
+        .radar-terminal { font-family: 'Space Grotesk', monospace; font-size: 11px; color: var(--neon-cyan); letter-spacing: 1px; text-transform: uppercase; text-align: center; height: 20px; width: 280px; text-shadow: 0 0 6px rgba(56, 189, 248, 0.5); }
+
+        @keyframes radarRotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pingPulse { 0% { transform: scale(0.8); opacity: 1; } 100% { transform: scale(3.5); opacity: 0; } }
+
+        /* Map UI Layer Customization */
+        .leaflet-container { background: #070b16 !important; }
+        .leaflet-bar a { background-color: #0d1527 !important; color: #fff !important; border-bottom: 1px solid rgba(255,255,255,0.1) !important; }
+    </style>
+</head>
+<body>
+
+    <div id="radarLoader" class="radar-overlay">
+        <div class="radar-scope">
+            <div class="radar-sweep"></div>
+            <div class="radar-ring-mid"></div>
+            <div class="radar-ring-inner"></div>
+            <div class="radar-ping"></div>
+            <div class="radar-ping-two"></div>
+        </div>
+        <div id="terminalLog" class="radar-terminal">Initializing Neural Matrix Core...</div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <span class="badge-top">Predictive Flight Engine</span>
+            <h1>PASIA <span>Matrix</span></h1>
+            <p>AI Route Calculator & Analytics Portal</p>
+        </div>
+
+        <form id="matrixForm" method="POST" action="/predict">
+            <div class="form-group">
+                <label>Airline Fleet Tier</label>
+                <div class="select-wrapper">
+                    <select id="airlineSel" name="airline">
+                        <option value="Cebu Pacific" {% if selected_airline == 'Cebu Pacific' %}selected{% endif %}>Cebu Pacific (Budget)</option>
+                        <option value="AirAsia" {% if selected_airline == 'AirAsia' %}selected{% endif %}>AirAsia (Budget)</option>
+                        <option value="Philippine Airlines" {% if selected_airline == 'Philippine Airlines' %}selected{% endif %}>Philippine Airlines (Premium Flagship)</option>
+                        <option value="Singapore Airlines" {% if selected_airline == 'Singapore Airlines' %}selected{% endif %}>Singapore Airlines (Luxury)</option>
+                        <option value="Japan Airlines" {% if selected_airline == 'Japan Airlines' %}selected{% endif %}>Japan Airlines (Luxury)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Philippine Origin Hub</label>
+                <div class="select-wrapper">
+                    <select id="sourceHub" name="source">
+                        <option value="Manila (MNL)" {% if selected_source == 'Manila (MNL)' %}selected{% endif %}>Manila (MNL)</option>
+                        <option value="Cebu (CEB)" {% if selected_source == 'Cebu (CEB)' %}selected{% endif %}>Cebu (CEB)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Asian Target Destination</label>
+                <div class="select-wrapper">
+                    <select id="destHub" name="destination">
+                        <option value="Singapore (SIN)" {% if selected_dest == 'Singapore (SIN)' %}selected{% endif %}>Singapore (SIN)</option>
+                        <option value="Tokyo (HND/NRT)" {% if selected_dest == 'Tokyo (HND/NRT)' %}selected{% endif %}>Tokyo, Japan (HND/NRT)</option>
+                        <option value="Seoul (ICN)" {% if selected_dest == 'Seoul (ICN)' %}selected{% endif %}>Seoul, South Korea (ICN)</option>
+                        <option value="Bangkok (BKK)" {% if selected_dest == 'Bangkok (BKK)' %}selected{% endif %}>Bangkok, Thailand (BKK)</option>
+                        <option value="Taipei (TPE)" {% if selected_dest == 'Taipei (TPE)' %}selected{% endif %}>Taipei, Taiwan (TPE)</option>
+                        <option value="Hong Kong (HKG)" {% if selected_dest == 'Hong Kong (HKG)' %}selected{% endif %}>Hong Kong (HKG)</option>
+                        <option value="Kuala Lumpur (KUL)" {% if selected_dest == 'Kuala Lumpur (KUL)' %}selected{% endif %}>Kuala Lumpur, Malaysia (KUL)</option>
+                        <option value="Jakarta (CGK)" {% if selected_dest == 'Jakarta (CGK)' %}selected{% endif %}>Jakarta, Indonesia (CGK)</option>
+                        <option value="New Delhi (DEL)" {% if selected_dest == 'New Delhi (DEL)' %}selected{% endif %}>New Delhi, India (DEL)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Scheduling & Travel Season</label>
+                <div class="select-wrapper">
+                    <select id="seasonSel" name="season">
+                        <option value="Standard" {% if selected_season == 'Standard' %}selected{% endif %}>Standard Season (Base Fare)</option>
+                        <option value="Peak" {% if selected_season == 'Peak' %}selected{% endif %}>Peak Holiday Season (+25% Surge)</option>
+                        <option value="OffPeak" {% if selected_season == 'OffPeak' %}selected{% endif %}>Rainy Season (-15% Discount)</option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-execute">Compute Sector Trajectory</button>
+        </form>
+
+        {% if fare %}
+            <div class="result-panel">
+                <div id="routeMap" class="map-block"></div>
+
+                <div class="flight-track-container">
+                    <div class="airport-labels">
+                        <span id="lblSource">---</span>
+                        <span id="lblDest">---</span>
+                    </div>
+                    <div class="track-line">
+                        <div id="trackFill" class="track-fill"></div>
+                        <div id="planeIcon" class="plane-icon">✈</div>
+                    </div>
+                </div>
+
+                <span class="result-title">Estimated Market Ticket Price</span>
+                <span class="price">₱{{ fare }}</span>
+                
+                <div class="stats-grid">
+                    <div class="stat-box">Model Base Fare<b>₱{{ base_fare }}</b></div>
+                    <div class="stat-box">Surges & Fees<b>₱{{ surge }}</b></div>
+                    <div class="stat-box">Total Path Distance<b>{{ distance }} km</b></div>
+                    <div class="stat-box">Est. Airtime<b>{{ duration }}</b></div>
+                </div>
+                
+                <div class="advice-panel">
+                    💡 <b>Matrix Analytics:</b> {{ advice }}
+                </div>
+
+                <div class="arcade-container">
+                    <label style="margin-bottom: 8px; color: var(--neon-cyan); display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;">Inbound Vector Landing Sequence</label>
+                    <canvas id="gameCanvas" class="arcade-canvas"></canvas>
+                    <div class="arcade-controls-row">
+                        <button type="button" id="btnPitchUp" class="btn-joy">▲ PITCH UP</button>
+                        <button type="button" id="btnPitchDown" class="btn-joy">▼ NOSE DOWN</button>
+                    </div>
+                    <div id="gameResetLink" class="arcade-reset-link" style="display: none;">[ ↻ Re-Fly Inbound Vector ]</div>
+                </div>
+                
+                <div class="badge-container">
+                    {% if needs_layover %}
+                        <span class="badge badge-layover">⚠️ 1 Layover Required</span>
+                    {% else %}
+                        <span class="badge badge-direct">✓ Non-Stop Route</span>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="history-section">
+            <label>Recent Predictions Cached</label>
+            <div id="historyList" class="history-list">
+                <div class="no-history">No search log records discovered in mobile cache.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global hardcoded geocoding library to guarantee correct marker snapping positions
+        const HUB_COORDINATES = {
+            "Manila (MNL)": [14.5086, 121.0194],
+            "Cebu (CEB)": [10.3075, 123.9794],
+            "Singapore (SIN)": [1.3501, 103.9944],
+            "Tokyo (HND/NRT)": [35.5494, 139.7798],
+            "Seoul (ICN)": [37.4602, 126.4407],
+            "Bangkok (BKK)": [13.6925, 100.7508],
+            "Taipei (TPE)": [25.0797, 121.2342],
+            "Hong Kong (HKG)": [22.3080, 113.9185],
+            "Kuala Lumpur (KUL)": [2.7456, 101.7072],
+            "Jakarta (CGK)": [-6.1256, 106.6558],
+            "New Delhi (DEL)": [28.5562, 77.1000]
+        };
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const form = document.getElementById("matrixForm");
+            const srcHub = document.getElementById("sourceHub");
+            const destHub = document.getElementById("destHub");
+            const radarLoader = document.getElementById("radarLoader");
+            const terminalLog = document.getElementById("terminalLog");
+
+            // Submit Process Animation Controller
+            form.addEventListener("submit", function(e) {
+                e.preventDefault();
+                radarLoader.classList.add("active");
+                const logs = [
+                    "Connecting AI Neural Vector...",
+                    "Parsing Airspace Coordinates...",
+                    "Analyzing Geodesic Distance Data...",
+                    "Compiling Final Fare Structure..."
+                ];
+                logs.forEach((logText, index) => {
+                    setTimeout(() => { terminalLog.innerText = logText; }, index * 450);
+                });
+                setTimeout(() => { form.submit(); }, 2100);
+            });
+            
+            // Clean legacy object garbage from older configurations safely
+            if (localStorage.getItem("pasia_history") && localStorage.getItem("pasia_history").includes("[object")) {
+                localStorage.clear();
+            }
+            
+            // Core Logic Pipeline Execution
+            if (document.getElementById("trackFill")) {
+                const srcValue = srcHub.value;
+                const destValue = destHub.value;
+                
+                const srcMatch = srcValue.match(/\(([^)]+)\)/);
+                const destMatch = destValue.match(/\(([^)]+)\)/);
+                const sCode = srcMatch ? srcMatch[1] : 'MNL';
+                const dCode = destMatch ? destMatch[1] : 'SIN';
+                
+                document.getElementById("lblSource").innerText = sCode;
+                document.getElementById("lblDest").innerText = dCode;
+                
+                setTimeout(() => {
+                    document.getElementById("trackFill").style.width = "100%";
+                    document.getElementById("planeIcon").style.left = "100%";
+                }, 200);
+
+                const currentSearch = {
+                    airline: document.getElementById("airlineSel").value,
+                    source: srcValue,
+                    destination: destValue,
+                    season: document.getElementById("seasonSel").value,
+                    srcCode: sCode,
+                    destCode: dCode,
+                    price: "{{ fare }}"
+                };
+                saveToSearchHistory(currentSearch);
+
+                // --- FLIGHT MATRIX MAP COORDINATE RESOLVER ENGINE ---
+                try {
+                    // Try to catch backend context first; fall back onto explicit client-side geocoding matrix dictionary matches
+                    let srcCoords = {% if source_coords is defined and source_coords %}{{ source_coords | tojson }}{% else %}null{% endif %};
+                    let destCoords = {% if dest_coords is defined and dest_coords %}{{ dest_coords | tojson }}{% else %}null{% endif %};
+                    
+                    if (!srcCoords || srcCoords.length !== 2) {
+                        srcCoords = HUB_COORDINATES[srcValue] || [14.5086, 121.0194];
+                    }
+                    if (!destCoords || destCoords.length !== 2) {
+                        destCoords = HUB_COORDINATES[destValue] || [1.3501, 103.9944];
+                    }
+                    
+                    const midLat = (srcCoords[0] + destCoords[0]) / 2;
+                    const midLng = (srcCoords[1] + destCoords[1]) / 2;
+                    
+                    const map = L.map('routeMap', { zoomControl: true, attributionControl: false }).setView([midLat, midLng], 3);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 7, minZoom: 2 }).addTo(map);
+
+                    // Add Explicit Origin & Destination Geodesic Markers
+                    L.circleMarker(srcCoords, { color: '#38bdf8', fillColor: '#0284c7', fillOpacity: 0.8, radius: 5 }).addTo(map);
+                    L.circleMarker(destCoords, { color: '#f97316', fillColor: '#f97316', fillOpacity: 0.8, radius: 5 }).addTo(map);
+                    
+                    const polyline = L.polyline([srcCoords, destCoords], { color: '#38bdf8', weight: 2, opacity: 0.6, dashArray: '5, 5' }).addTo(map);
+                    
+                    // Force size recalculations to unpack layout dead zones instantly
+                    map.invalidateSize();
+                    
+                    setTimeout(() => {
+                        map.invalidateSize({ animate: true });
+                        map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+                    }, 150);
+
+                } catch(err) { 
+                    console.error("Leaflet map rendering error: ", err); 
+                }
+
+                // Initialize Landing Flight Engine
+                initLandingSimulator();
+            }
+
+            renderSearchHistory();
+        });
+
+        // HTML5 Simulation Game Framework Handler
+        function initLandingSimulator() {
+            const canvas = document.getElementById("gameCanvas");
+            if (!canvas) return;
+            const ctx = canvas.getContext("2d");
+            const resetLink = document.getElementById("gameResetLink");
+            
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = 140;
+
+            let planeY, planeX, targetY, scoreState, isGameOver, animationId;
+            
+            function resetGameEngine() {
+                if (animationId) cancelAnimationFrame(animationId);
+                planeY = 30;
+                planeX = 15;
+                targetY = 105;
+                scoreState = "Telemetry: Stabilizing descent trajectory...";
+                isGameOver = false;
+                resetLink.style.display = "none";
+                updateFrame();
+            }
+            
+            function updateFrame() {
+                if (isGameOver) return;
+                
+                planeX += (canvas.width / 240);
+                
+                ctx.fillStyle = "#02040a";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                const targetX = canvas.width - 55;
+                ctx.fillStyle = "rgba(16, 185, 129, 0.12)";
+                ctx.fillRect(targetX, targetY - 12, 50, 24);
+                ctx.strokeStyle = "#10b981";
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(targetX, targetY - 12, 50, 24);
+                
+                ctx.strokeStyle = "rgba(56, 189, 248, 0.08)";
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(15, 30);
+                ctx.lineTo(targetX + 25, targetY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                ctx.fillStyle = "#38bdf8";
+                ctx.font = "14px Arial";
+                ctx.fillText("✈", planeX, planeY);
+                
+                ctx.fillStyle = "#64748b";
+                ctx.font = "10px monospace";
+                ctx.fillText(scoreState, 12, 22);
+                
+                if (planeX >= targetX) {
+                    isGameOver = true;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = "#02040a";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    if (Math.abs(planeY - targetY) <= 14) {
+                        ctx.fillStyle = "#10b981";
+                        scoreState = "✓ SECTOR ACQUIRED: SUCCESSFUL TOUCHDOWN!";
+                    } else {
+                        ctx.fillStyle = "#f97316";
+                        scoreState = "⚠️ CRITICAL ALTITUDE Error: MISSED APPROACH";
+                    }
+                    
+                    ctx.font = "11px monospace";
+                    ctx.fillText(scoreState, 15, canvas.height / 2 + 4);
+                    resetLink.style.display = "inline-block";
+                    return;
+                }
+                
+                animationId = requestAnimationFrame(updateFrame);
+            }
+            
+            document.getElementById("btnPitchUp").onclick = function() { if(!isGameOver) planeY = Math.max(15, planeY - 10); };
+            document.getElementById("btnPitchDown").onclick = function() { if(!isGameOver) planeY = Math.min(canvas.height - 15, planeY + 10); };
+            resetLink.onclick = resetGameEngine;
+            
+            resetGameEngine();
+        }
+
+        // Cache Management Storage Logic
+        function saveToSearchHistory(searchItem) {
+            try {
+                let history = JSON.parse(localStorage.getItem("pasia_history")) || [];
+                history = history.filter(item => !(item.source === searchItem.source && item.destination === searchItem.destination && item.airline === searchItem.airline && item.season === searchItem.season));
+                history.unshift(searchItem);
+                if (history.length > 3) history.pop();
+                localStorage.setItem("pasia_history", JSON.stringify(history));
+            } catch (e) { console.log(e); }
+        }
+
+        // Cache Presentation Layout Engine
+        function renderSearchHistory() {
+            const historyList = document.getElementById("historyList");
+            if (!historyList) return;
+            
+            try {
+                const history = JSON.parse(localStorage.getItem("pasia_history")) || [];
+                if (history.length === 0) return;
+                
+                historyList.innerHTML = "";
+                history.forEach(item => {
+                    const div = document.createElement("div");
+                    div.className = "history-item";
+                    div.innerHTML = `
+                        <div>
+                            <div class="history-route">${item.srcCode || '---'} → ${item.destCode || '---'}</div>
+                            <div class="history-meta">${item.airline || 'Unknown'} • ${item.season || 'Standard'}</div>
+                        </div>
+                        <div class="history-price">₱${item.price || '0'}</div>
+                    `;
+                    div.addEventListener("click", () => {
+                        document.getElementById("radarLoader").classList.add("active");
+                        document.getElementById("terminalLog").innerText = "Restoring Cached Flight Matrix Vector...";
+                        setTimeout(() => {
+                            document.getElementById("airlineSel").value = item.airline;
+                            document.getElementById("sourceHub").value = item.source;
+                            document.getElementById("destHub").value = item.destination;
+                            document.getElementById("seasonSel").value = item.season;
+                            document.getElementById("matrixForm").submit();
+                        }, 1200);
+                    });
+                    historyList.appendChild(div);
+                });
+            } catch (e) { console.log(e); }
+        }
+    </script>
+</body>
+</html>
